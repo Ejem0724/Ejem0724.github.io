@@ -1,2 +1,3 @@
-Check out my [linkedin](linkedin.com/brandonejem)
-Check out my [linkedin](https://linkedin.com/in/brandonejem)
+# Socials
+Check out my [linkedin](https://www.linkedin.com/in/brandonejem)
+[Home](https://www.Ejem0724.github.io/README.md)
