@@ -1,7 +1,6 @@
----
-layout: default
-title: About
----
+layout: page
+title: "About ME"
+permalink: /about.md
 
 # Socials
 Check out my [linkedin](https://www.linkedin.com/in/brandonejem)
