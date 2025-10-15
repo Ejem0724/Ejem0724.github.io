@@ -1,3 +1,8 @@
+---
+layout: default
+title: Brandon Ejem
+---
+
 # Brandon Ejem
 # Operations Analyst
 
