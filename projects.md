@@ -3,8 +3,8 @@ layout: default
 title: projects
 ---
 # Projects
-
----
+\
+\
 [Home](./)\
 [Contact Me](./contact-me)\
 [Work History](./work-history)\
