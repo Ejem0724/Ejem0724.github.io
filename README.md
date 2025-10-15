@@ -2,6 +2,6 @@
 # Operations Analyst
 
 ---
-[About Me](https://ejem0724.github.io/contact-me.md)
+[About Me](https://ejem0724.github.io/contact-me)
 ---
 
