@@ -4,6 +4,7 @@ title: Contact Me
 ---
 
 # Contact me at [linkedin](https://www.linkedin.com/in/ejem-brandon/)
+
 ---
 [Home](https://ejem0724.github.io)\
 [Work History](https://ejem0724.github.io/work-history)\
