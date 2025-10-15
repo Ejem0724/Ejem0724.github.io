@@ -10,7 +10,7 @@ title: Brandon Ejem
 Hey there, Welcome to my profile site!
 ---
 
-[Home](https://ejem0724.github.io)\
+[Home](https://ejem0724.github.io/readme)\
 [Contact Me](https://ejem0724.github.io/contact-me)\
 [Work History](https://ejem0724.github.io/work-history)\
 [Projects](https://ejem0724.github.io/projects)\
