@@ -2,14 +2,11 @@
 layout: default
 title: Brandon Ejem
 ---
-
 # Brandon Ejem
 # Operations Analyst
-
 ---
 Hey there, Welcome to my profile site!
 ---
-
 [Home](./)\
 [Contact Me](./contact-me)\
 [Work History](./work-history)\
