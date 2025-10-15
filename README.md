@@ -2,8 +2,8 @@
 layout: default
 title: Brandon Ejem
 ---
-# Brandon Ejem\
-# Operations Analyst\
+# Brandon Ejem
+# Operations Analyst
 \
 Hey there, Welcome to my profile site!\
 \
