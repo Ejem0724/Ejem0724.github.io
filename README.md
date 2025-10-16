@@ -1,7 +1,11 @@
 {% include header.html %}
+
+
 {% include navigation.html %}
-# Brandon Ejem
-# Operations Analyst
+
+
+
+
 
 Hey there, Welcome to my profile site!
 
