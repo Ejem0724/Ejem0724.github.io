@@ -11,7 +11,7 @@ Created advanced queries using SQL to optimize member-quest matching based on sk
 data validation and reporting features for leadership decision-making.
 
 ## Cyclistic Data Analysis | Coursera | May 2024 | SQL, Python, Data Visualization
-[view this project](./projects/Cyclistic_analysis)
+[view this project](./projects/Cyclistic_analysis)\
 Conducted comprehensive analysis of 12 months of bike share data (over 2m records) to identify usage patterns
 and user behavior differences. Utilized pandas, and matplotlib to discover key insights showing casual riders prefer
 weekend recreational trips while annual members use bikes for weekday commuting. Using this information for marketing
