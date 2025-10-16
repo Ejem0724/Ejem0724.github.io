@@ -1,3 +1,5 @@
+{% include header.html %}
+{% include navigation.html %}
 # Brandon Ejem
 # Operations Analyst
 
@@ -8,3 +10,4 @@ Hey there, Welcome to my profile site!
 [Work History](./work-history)\
 [Projects](./projects)\
 [Resume](https://drive.google.com/file/d/1N04MfUDJqpCMQxs24CMc0z-Vb1zr_SuE/view?usp=drive_link)
+{% include footer.html %}
