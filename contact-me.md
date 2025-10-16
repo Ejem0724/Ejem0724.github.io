@@ -2,7 +2,7 @@
 layout: default
 title: Contact Me
 ---
-\
+
 # Contact me at [linkedin](https://www.linkedin.com/in/ejem-brandon/)
 \
 \
