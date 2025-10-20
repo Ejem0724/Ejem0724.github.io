@@ -10,6 +10,8 @@ body {
 .container {
   flex: 1;
   max-width: 1200px;
+  justify-content: center; /* Centers horizontally */
+  align-items: center;    /* Centers vertically */
 }
 
 footer {
