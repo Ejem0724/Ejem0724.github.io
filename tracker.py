@@ -88,3 +88,15 @@ def run_guild_sync():
 
 if __name__ == "__main__":
     run_guild_sync()
+
+if all_stats:
+        df = pd.DataFrame(all_stats)
+        df.to_csv("legion_live_stats.csv", index=False)
+        print("Success: File 'legion_live_stats.csv' created.")
+        
+        # --- ADD THIS LINE BELOW ---
+        generate_html(df) 
+        # ---------------------------
+    else:
+        print("Error: No data was collected!")
+        exit(1)
