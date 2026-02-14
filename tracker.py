@@ -1,13 +1,11 @@
 import requests
 import pandas as pd
-import time
 import os
 from datetime import datetime
 
-# --- CONFIGURATION ---
+# Define these explicitly so the script doesn't hunt for them
 LEGIONNAIRES = ["Ejem", "Lanidae", "Alastari", "Ana", "Argixel", "Daktyl", "Titris", "Treskies", "bitHawke", "Alcyonaria", "Axterminator", "Feltos", "LordDrazos", "Maple", "Sakura"]
-SKILLS = ['Carpentry', 'Construction', 'Cooking', 'Farming', 'Fishing', 'Foraging', 'Forestry', 'Hunting', 'Leatherworking', 'Masonry', 'Merchanting', 'Mining', 'Sailing', 'Scholar', 'Slayer', 'Smithing', 'Tailoring', 'Taming']
-XP_MULTIPLIER = 1.106 # Your engineered math
+XP_MULTIPLIER = 1.106 
 
 def get_xp_table(max_level=120):
     xp_table = [0]
@@ -27,51 +25,38 @@ def calculate_level(xp):
     return len(BITCRAFT_XP_TABLE)
 
 def run_guild_sync():
-    print(f"\n[{datetime.now()}] Starting Sync...")
+    print(f"Starting Data Pull for {len(LEGIONNAIRES)} players...")
     all_stats = []
     
     for name in LEGIONNAIRES:
         try:
-            # Step 1: Search for Entity ID
-            search_url = f"https://bitjita.com/api/players?q={name}"
-            search_res = requests.get(search_url, timeout=10).json()
+            # Use a timeout so the script doesn't hang forever
+            search_res = requests.get(f"https://bitjita.com/api/players?q={name}", timeout=15).json()
             
-            if search_res['players']:
+            if search_res.get('players'):
                 p_id = search_res['players'][0]['entityId']
-                
-                # Step 2: Get Detailed Stats
-                player_url = f"https://bitjita.com/api/players/{p_id}"
-                player_res = requests.get(player_url, timeout=10).json()
+                player_res = requests.get(f"https://bitjita.com/api/players/{p_id}", timeout=15).json()
                 player = player_res['player']
                 
-                # Step 3: Parse and Convert
                 stats = {"Name": name, "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
                 for exp in player['experience']:
+                    # Accessing the skillMap safely
                     skill_id = str(exp['skill_id'])
                     if skill_id in player['skillMap']:
                         s_name = player['skillMap'][skill_id]['name']
                         stats[s_name] = calculate_level(exp['quantity'])
-                
                 all_stats.append(stats)
-                print(f"  > Synced {name}")
+                print(f"Successfully synced: {name}")
         except Exception as e:
-            print(f"  ! Failed {name}: {e}")
+            print(f"Error syncing {name}: {e}")
 
-    # Step 4: Save Result
     if all_stats:
         df = pd.DataFrame(all_stats)
-        # Ensure column order is consistent
-        cols = ['Name', 'Timestamp'] + [s for s in SKILLS if s in df.columns]
-        df = df[cols]
-        
-        # Append to a master file or overwrite current
         df.to_csv("legion_live_stats.csv", index=False)
-        print(f"[{datetime.now()}] Update Complete. CSV Saved.")
+        print("Success: File 'legion_live_stats.csv' created.")
+    else:
+        print("Error: No data was collected!")
+        exit(1) # This tells GitHub the run failed because no data was found
 
-# --- THE LOOP ---
 if __name__ == "__main__":
-    print("Legion Autonomous Tracker Active.")
-    while True:
-        run_guild_sync()
-        print("Sleeping for 1 hour...")
-        time.sleep(3600) # 3600 seconds = 1 hour
+    run_guild_sync()
