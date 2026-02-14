@@ -1,6 +1,7 @@
 import requests
 import pandas as pd
 from datetime import datetime
+import os
 import sys
 
 # --- CONFIGURATION ---
@@ -9,6 +10,7 @@ WIPE_DATE = datetime(2026, 2, 26, 12, 0, 0)
 XP_MULTIPLIER = 1.106 
 
 def get_xp_table(max_level=120):
+    """Generates XP thresholds using the engineered multiplier."""
     xp_table = [0]
     current_total_xp = 0
     for level in range(1, max_level):
@@ -20,95 +22,45 @@ def get_xp_table(max_level=120):
 BITCRAFT_XP_TABLE = get_xp_table()
 
 def calculate_level(xp):
+    """Matches raw XP quantity to the correct level."""
     if xp <= 0: return 1
     for level, threshold in enumerate(BITCRAFT_XP_TABLE):
         if xp < threshold: return level
     return len(BITCRAFT_XP_TABLE)
 
-def run_guild_sync():
-    print(f"Starting Sync for Claim ID: {CLAIM_ID}")
-    
-    # 1. Get Claim Members (Pulling both Name AND ID)
-    claim_url = f"https://bitjita.com/api/claims/{CLAIM_ID}/members"
-    try:
-        response = requests.get(claim_url, timeout=15)
-        response.raise_for_status()
-        member_data = response.json()
-    except Exception as e:
-        print(f"CRITICAL ERROR: Claim API unreachable. {e}")
-        sys.exit(1)
-
-    all_stats = []
-    
-    # 2. Loop through members using their Entity ID directly
-    for member in member_data:
-        name = member.get('userName')
-        p_id = member.get('playerEntityId') # This is the magic key!
-        
-        if not p_id:
-            print(f"Skipping {name}: No Entity ID found.")
-            continue
-
-        try:
-            # Direct hit on the player's data
-            player_url = f"https://bitjita.com/api/players/{p_id}"
-            p_res = requests.get(player_url, timeout=10).json()
-            player = p_res['player']
-            
-            stats = {"Name": name, "Timestamp": datetime.now().strftime("%H:%M")}
-            
-            # Map skills
-            for exp in player['experience']:
-                s_id = str(exp['skill_id'])
-                if s_id in player['skillMap']:
-                    s_name = player['skillMap'][s_id]['name']
-                    stats[s_name] = calculate_level(exp['quantity'])
-            
-            all_stats.append(stats)
-            print(f"Successfully synced: {name} ({p_id})")
-            
-        except Exception as e:
-            print(f"Failed to fetch detailed data for {name}: {e}")
-
-    # 3. Save and Generate HTML
-    if all_stats:
-        df = pd.DataFrame(all_stats)
-        df.to_csv("legion_live_stats.csv", index=False)
-        generate_html(df) # (Keeping your existing HTML function)
-        print("Update Complete.")
-    else:
-        print("No player data could be retrieved.")
-        sys.exit(1)
-
-# (Make sure to keep your generate_html function here as well!)
-
 def generate_html(df):
+    """Creates a clean, mobile-friendly HTML dashboard."""
     now = datetime.now()
     delta = WIPE_DATE - now
     countdown = f"{delta.days}d {delta.seconds//3600}h" if delta.total_seconds() > 0 else "WIPED"
 
-    # Formatting averages
+    # Calculate Guild Averages
     numeric_cols = df.select_dtypes(include=['number']).columns
     avg_row = {col: round(df[col].mean(), 1) for col in numeric_cols}
     avg_row['Name'] = '<strong>GUILD AVERAGE</strong>'
     avg_row['Timestamp'] = '-'
     
+    # Sort by Carpentry (Primary Guild Goal)
     df_sorted = df.sort_values(by='Carpentry', ascending=False)
     df_final = pd.concat([df_sorted, pd.DataFrame([avg_row])], ignore_index=True)
 
-    # Note the lack of indentation here—this prevents the 'indented' HTML look in the source
+    # Left-aligned string to prevent source-code indentation issues
     html_content = f"""<html>
 <head>
 <title>Legion Guild Tracker</title>
 <style>
-body {{ font-family: sans-serif; background: #121212; color: #e0e0e0; padding: 20px; line-height: 1.5; }}
+body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #e0e0e0; padding: 20px; line-height: 1.5; }}
 .header {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #00ffcc; padding-bottom: 10px; }}
-.countdown {{ background: #b91c1c; color: white; padding: 10px; border-radius: 4px; font-weight: bold; }}
-table {{ border-collapse: collapse; width: 100%; margin-top: 20px; background: #1e1e1e; font-size: 0.9em; }}
-th, td {{ border: 1px solid #333; padding: 8px; text-align: left; }}
-th {{ background: #2d2d2d; color: #00ffcc; }}
+.countdown {{ background: #b91c1c; color: white; padding: 10px 15px; border-radius: 4px; font-weight: bold; font-size: 1.1em; }}
+.table-container {{ overflow-x: auto; margin-top: 20px; }}
+table {{ border-collapse: collapse; width: 100%; background: #1e1e1e; font-size: 0.85em; }}
+th, td {{ border: 1px solid #333; padding: 10px; text-align: left; white-space: nowrap; }}
+th {{ background: #2d2d2d; color: #00ffcc; text-transform: uppercase; letter-spacing: 0.5px; }}
 tr:nth-child(even) {{ background: #252525; }}
+tr:hover {{ background: #333; }}
 tr:last-child {{ background: #00ffcc11; color: #00ffcc; font-weight: bold; }}
+h1 {{ margin: 0; color: #00ffcc; }}
+.meta {{ color: #888; margin-top: 10px; font-size: 0.9em; }}
 </style>
 </head>
 <body>
@@ -116,40 +68,72 @@ tr:last-child {{ background: #00ffcc11; color: #00ffcc; font-weight: bold; }}
 <h1>Legion Leaderboard</h1>
 <div class="countdown">WIPE IN: {countdown}</div>
 </div>
-<p>Updated: {now.strftime("%Y-%m-%d %H:%M:%S")}</p>
+<div class="meta">Data Refreshed: {now.strftime("%Y-%m-%d %H:%M:%S")}</div>
+<div class="table-container">
 {df_final.to_html(index=False, escape=False)}
+</div>
 </body>
 </html>"""
     
     with open("index.html", "w") as f:
         f.write(html_content)
+    print("Dashboard 'index.html' generated.")
 
 def run_guild_sync():
-    members = get_claim_members()
+    """Main ETL pipeline: Extract (API), Transform (Math), Load (CSV/HTML)."""
+    print(f"Connecting to Claim: {CLAIM_ID}")
+    
+    # 1. Fetch member IDs from the claim
+    try:
+        claim_url = f"https://bitjita.com/api/claims/{CLAIM_ID}/members"
+        resp = requests.get(claim_url, timeout=20)
+        resp.raise_for_status()
+        members_list = resp.json()
+    except Exception as e:
+        print(f"FAILED to fetch claim members: {e}")
+        sys.exit(1)
+
     all_stats = []
     
-    for name in members:
+    # 2. Iterate through each member using their specific EntityID
+    for member in members_list:
+        name = member.get('userName')
+        p_id = member.get('playerEntityId')
+        
+        if not p_id: continue
+        
         try:
-            search = requests.get(f"https://bitjita.com/api/players?q={name}", timeout=10).json()
-            if search.get('players'):
-                p_id = search['players'][0]['entityId']
-                p_res = requests.get(f"https://bitjita.com/api/players/{p_id}", timeout=10).json()
-                player = p_res['player']
-                
-                stats = {"Name": name, "Timestamp": datetime.now().strftime("%H:%M")}
-                for exp in player['experience']:
-                    s_id = str(exp['skill_id'])
-                    if s_id in player['skillMap']:
-                        s_name = player['skillMap'][s_id]['name']
-                        stats[s_name] = calculate_level(exp['quantity'])
-                all_stats.append(stats)
-        except:
-            continue
+            p_resp = requests.get(f"https://bitjita.com/api/players/{p_id}", timeout=15)
+            p_data = p_resp.json().get('player')
+            
+            # Start player record
+            stats = {"Name": name, "Timestamp": datetime.now().strftime("%H:%M")}
+            
+            # Parse skill experience quantities into levels
+            for exp in p_data.get('experience', []):
+                s_id = str(exp.get('skill_id'))
+                if s_id in p_data.get('skillMap', {}):
+                    s_name = p_data['skillMap'][s_id]['name']
+                    stats[s_name] = calculate_level(exp.get('quantity', 0))
+            
+            all_stats.append(stats)
+            print(f"Synced: {name}")
+            
+        except Exception as e:
+            print(f"Skipping {name}: {e}")
 
+    # 3. Save outputs
     if all_stats:
         df = pd.DataFrame(all_stats)
-        generate_html(df)
+        # Handle cases where some skills might be missing for some players
+        df = df.fillna(1) 
+        
         df.to_csv("legion_live_stats.csv", index=False)
+        generate_html(df)
+        print(f"Sync complete. Processed {len(all_stats)} players.")
+    else:
+        print("Error: No player data was retrieved.")
+        sys.exit(1)
 
 if __name__ == "__main__":
     run_guild_sync()
