@@ -1,0 +1,35 @@
+name: Legion Guild Sync
+
+on:
+  schedule:
+    # This runs every hour (standard sustain)
+    # To do "Blitz" mode (every 15 mins), change to: */15 * * * *
+    - cron: '0 * * * *' 
+  workflow_dispatch: # Allows you to run it manually via a button
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+
+    - name: Run tracker
+      run: python tracker.py
+
+    - name: Upload Data Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: legion-level-data
+        path: legion_live_stats.csv
+        retention-days: 7 # Keeps the file for a week
