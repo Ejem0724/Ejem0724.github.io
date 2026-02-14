@@ -1,7 +1,6 @@
 import requests
 import pandas as pd
 from datetime import datetime
-import os
 import sys
 
 # --- CONFIGURATION ---
@@ -26,28 +25,62 @@ def calculate_level(xp):
         if xp < threshold: return level
     return len(BITCRAFT_XP_TABLE)
 
-def get_claim_members():
-    """Fetches members and crashes if the API is unreachable."""
-    url = f"https://bitjita.com/api/claims/576460752315947982/members"
-    print(f"Requesting claim data from: {url}")
-    #https://bitjita.com/api/claims/576460752315947982/members
+def run_guild_sync():
+    print(f"Starting Sync for Claim ID: {CLAIM_ID}")
+    
+    # 1. Get Claim Members (Pulling both Name AND ID)
+    claim_url = f"https://bitjita.com/api/claims/{CLAIM_ID}/members"
     try:
-        response = requests.get(url, timeout=15)
-        response.raise_for_status() # This triggers an error for 404, 500, etc.
-        data = response.json()
-        
-        # Ensure the data is actually a list of members
-        if isinstance(data, list):
-            members = [member['userName'] for member in data]
-            return members
-        else:
-            raise ValueError(f"Unexpected JSON format from Claim API: {data}")
-            
+        response = requests.get(claim_url, timeout=15)
+        response.raise_for_status()
+        member_data = response.json()
     except Exception as e:
-        print(f"\n!!! CRITICAL ERROR: Could not fetch claim members.")
-        print(f"Potential Cause: {e}")
-        print("Possible fixes: Check if CLAIM_ID is still valid or if bitjita.com is down.")
-        sys.exit(1) # Forces GitHub Action to show a 'Fail' status
+        print(f"CRITICAL ERROR: Claim API unreachable. {e}")
+        sys.exit(1)
+
+    all_stats = []
+    
+    # 2. Loop through members using their Entity ID directly
+    for member in member_data:
+        name = member.get('userName')
+        p_id = member.get('playerEntityId') # This is the magic key!
+        
+        if not p_id:
+            print(f"Skipping {name}: No Entity ID found.")
+            continue
+
+        try:
+            # Direct hit on the player's data
+            player_url = f"https://bitjita.com/api/players/{p_id}"
+            p_res = requests.get(player_url, timeout=10).json()
+            player = p_res['player']
+            
+            stats = {"Name": name, "Timestamp": datetime.now().strftime("%H:%M")}
+            
+            # Map skills
+            for exp in player['experience']:
+                s_id = str(exp['skill_id'])
+                if s_id in player['skillMap']:
+                    s_name = player['skillMap'][s_id]['name']
+                    stats[s_name] = calculate_level(exp['quantity'])
+            
+            all_stats.append(stats)
+            print(f"Successfully synced: {name} ({p_id})")
+            
+        except Exception as e:
+            print(f"Failed to fetch detailed data for {name}: {e}")
+
+    # 3. Save and Generate HTML
+    if all_stats:
+        df = pd.DataFrame(all_stats)
+        df.to_csv("legion_live_stats.csv", index=False)
+        generate_html(df) # (Keeping your existing HTML function)
+        print("Update Complete.")
+    else:
+        print("No player data could be retrieved.")
+        sys.exit(1)
+
+# (Make sure to keep your generate_html function here as well!)
 
 def generate_html(df):
     now = datetime.now()
