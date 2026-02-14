@@ -7,6 +7,34 @@ from datetime import datetime
 LEGIONNAIRES = ["Ejem", "Lanidae", "Alastari", "Ana", "Argixel", "Daktyl", "Titris", "Treskies", "bitHawke", "Alcyonaria", "Axterminator", "Feltos", "LordDrazos", "Maple", "Sakura"]
 XP_MULTIPLIER = 1.106 
 
+def generate_html(df):
+    # Sort by Carpentry just as a default, or whichever skill you prefer
+    df = df.sort_values(by='Carpentry', ascending=False)
+    
+    html_content = f"""
+    <html>
+    <head>
+        <title>Legion Guild Tracker</title>
+        <style>
+            body {{ font-family: sans-serif; background: #1a1a1a; color: #eee; padding: 20px; }}
+            table {{ border-collapse: collapse; width: 100%; background: #2a2a2a; }}
+            th, td {{ border: 1px solid #444; padding: 12px; text-align: left; }}
+            th {{ background: #333; color: #00ffcc; cursor: pointer; }}
+            tr:nth-child(even) {{ background: #252525; }}
+            tr:hover {{ background: #3a3a3a; }}
+            .timestamp {{ color: #888; margin-bottom: 20px; }}
+        </style>
+    </head>
+    <body>
+        <h1>Legion Guild Leaderboard</h1>
+        <div class="timestamp">Last Updated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
+        {df.to_html(index=False, classes='guild-table')}
+    </body>
+    </html>
+    """
+    with open("index.html", "w") as f:
+        f.write(html_content)
+    print("HTML Dashboard generated.")
 def get_xp_table(max_level=120):
     xp_table = [0]
     current_total_xp = 0
