@@ -31,30 +31,30 @@ def generate_html(df):
     delta = WIPE_DATE - now
     countdown = f"{delta.days}d {delta.seconds//3600}h" if delta.total_seconds() > 0 else "WIPED"
 
-    numeric_cols = df.select_dtypes(include=['number']).columns
-    avg_row = {col: round(df[col].mean(), 1) for col in numeric_cols}
-    avg_row['Name'] = '<strong>GUILD AVERAGE</strong>'
-    avg_row['Timestamp'] = '-'
-    
-    if 'Carpentry' in df.columns:
-        df_sorted = df.sort_values(by='Carpentry', ascending=False)
-    else:
-        df_sorted = df
+    # Separate actual players from the average for sorting
+    player_df = df[df['Name'] != '<strong>GUILD AVERAGE</strong>'].copy()
+    avg_df = df[df['Name'] == '<strong>GUILD AVERAGE</strong>'].copy()
 
-    df_final = pd.concat([df_sorted, pd.DataFrame([avg_row])], ignore_index=True)
+    # Sort players by Carpentry
+    if 'Carpentry' in player_df.columns:
+        player_df = player_df.sort_values(by='Carpentry', ascending=False)
+
+    # Re-combine
+    df_final = pd.concat([player_df, avg_df], ignore_index=True)
 
     html_content = f"""<html>
 <head>
 <title>Legion Guild Tracker</title>
 <style>
-body {{ font-family: sans-serif; background: #121212; color: #e0e0e0; padding: 20px; line-height: 1.5; }}
+body {{ font-family: sans-serif; background: #121212; color: #e0e0e0; padding: 20px; }}
 .header {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #00ffcc; padding-bottom: 10px; }}
 .countdown {{ background: #b91c1c; color: white; padding: 10px 15px; border-radius: 4px; font-weight: bold; }}
 .table-container {{ overflow-x: auto; margin-top: 20px; }}
 table {{ border-collapse: collapse; width: 100%; background: #1e1e1e; font-size: 0.85em; }}
-th, td {{ border: 1px solid #333; padding: 10px; text-align: left; }}
+th, td {{ border: 1px solid #333; padding: 10px; text-align: left; white-space: nowrap; }}
 th {{ background: #2d2d2d; color: #00ffcc; text-transform: uppercase; }}
 tr:nth-child(even) {{ background: #252525; }}
+tr:hover {{ background: #333; }}
 tr:last-child {{ background: #00ffcc11; color: #00ffcc; font-weight: bold; }}
 h1 {{ margin: 0; color: #00ffcc; }}
 </style>
@@ -82,6 +82,7 @@ def run_guild_sync():
         resp = requests.get(claim_url, timeout=20)
         resp.raise_for_status()
         members_data = resp.json()
+        print(f"DEBUG: Raw API Data sample: {str(members_data)[:200]}") # Help us see the 'count' issue
     except Exception as e:
         print(f"FAILED to fetch claim members: {e}")
         sys.exit(1)
@@ -89,7 +90,7 @@ def run_guild_sync():
     all_stats = []
     
     for item in members_data:
-        # DATA SHAPE PROTECTION: Check if item is a dict or just a string
+        # DATA SHAPE PROTECTION
         if isinstance(item, dict):
             name = item.get('userName')
             p_id = item.get('playerEntityId')
@@ -97,20 +98,17 @@ def run_guild_sync():
             name = str(item)
             p_id = None
             
-        print(f"Processing: {name}...")
+        if name.lower() == 'count': continue # Filter out the weird 'count' entry if it exists
 
         try:
-            # If we don't have an ID, we MUST search by name first
             if not p_id:
                 search_url = f"https://bitjita.com/api/players?q={name}"
                 search_res = requests.get(search_url, timeout=10).json()
                 if search_res.get('players'):
                     p_id = search_res['players'][0]['entityId']
                 else:
-                    print(f"Could not find ID for name: {name}")
                     continue
 
-            # Fetch detailed stats
             p_resp = requests.get(f"https://bitjita.com/api/players/{p_id}", timeout=10)
             p_data = p_resp.json().get('player')
             
@@ -123,18 +121,28 @@ def run_guild_sync():
                     stats[s_name] = calculate_level(exp.get('quantity', 0))
             
             all_stats.append(stats)
-            print(f"  > Synced {name}")
+            print(f"Synced: {name}")
             
         except Exception as e:
-            print(f"  ! Error with {name}: {e}")
+            print(f"Error with {name}: {e}")
 
     if all_stats:
         df = pd.DataFrame(all_stats).fillna(1)
+        
+        # Calculate Averages BEFORE adding the average row to the list
+        numeric_cols = df.select_dtypes(include=['number']).columns
+        avg_row = {col: round(df[col].mean(), 1) for col in numeric_cols}
+        avg_row['Name'] = '<strong>GUILD AVERAGE</strong>'
+        avg_row['Timestamp'] = '-'
+        
+        # Add the average row to the dataframe
+        df = pd.concat([df, pd.DataFrame([avg_row])], ignore_index=True)
+        
         df.to_csv("legion_live_stats.csv", index=False)
         generate_html(df)
-        print(f"Sync complete. Total: {len(all_stats)}")
+        print(f"Sync complete. Total Players: {len(all_stats)}")
     else:
-        print("Error: No data retrieved.")
+        print("No players found in claim data.")
         sys.exit(1)
 
 if __name__ == "__main__":
