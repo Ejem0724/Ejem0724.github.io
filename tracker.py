@@ -28,9 +28,9 @@ def calculate_level(xp):
 
 def get_claim_members():
     """Fetches members and crashes if the API is unreachable."""
-    url = f"https://bitjita.com/api/claims/{CLAIM_ID}/members"
+    url = f"https://bitjita.com/api/claims/576460752315947982/members"
     print(f"Requesting claim data from: {url}")
-    
+    #https://bitjita.com/api/claims/576460752315947982/members
     try:
         response = requests.get(url, timeout=15)
         response.raise_for_status() # This triggers an error for 404, 500, etc.
