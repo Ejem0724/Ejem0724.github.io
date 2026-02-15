@@ -10,6 +10,7 @@ WIPE_DATE = datetime(2026, 2, 26, 12, 0, 0)
 XP_MULTIPLIER = 1.106 
 
 def get_xp_table(max_level=120):
+    """Generates XP thresholds using the engineered 1.106 multiplier."""
     xp_table = [0]
     current_total_xp = 0
     for level in range(1, max_level):
@@ -21,40 +22,44 @@ def get_xp_table(max_level=120):
 BITCRAFT_XP_TABLE = get_xp_table()
 
 def calculate_level(xp):
+    """Matches raw XP quantity to the correct level."""
     if xp <= 0: return 1
     for level, threshold in enumerate(BITCRAFT_XP_TABLE):
         if xp < threshold: return level
     return len(BITCRAFT_XP_TABLE)
 
 def generate_html(df):
+    """Creates a clean, mobile-friendly HTML dashboard sorted by Name."""
     now = datetime.now()
     delta = WIPE_DATE - now
     countdown = f"{delta.days}d {delta.seconds//3600}h" if delta.total_seconds() > 0 else "WIPED"
 
-    # Separate players and average for clean sorting
+    # 1. Separate the average row so it doesn't get caught in the alphabetical sort
     player_df = df[df['Name'] != '<strong>GUILD AVERAGE</strong>'].copy()
     avg_df = df[df['Name'] == '<strong>GUILD AVERAGE</strong>'].copy()
 
-    if 'Carpentry' in player_df.columns:
-        player_df = player_df.sort_values(by='Carpentry', ascending=False)
+    # 2. Sort players alphabetically by Name (case-insensitive)
+    player_df = player_df.sort_values(by='Name', key=lambda col: col.str.lower(), ascending=True)
 
+    # 3. Re-combine: Players on top, Average on the bottom
     df_final = pd.concat([player_df, avg_df], ignore_index=True)
 
     html_content = f"""<html>
 <head>
 <title>Legion Guild Tracker</title>
 <style>
-body {{ font-family: sans-serif; background: #121212; color: #e0e0e0; padding: 20px; }}
+body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #e0e0e0; padding: 20px; line-height: 1.5; }}
 .header {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #00ffcc; padding-bottom: 10px; }}
-.countdown {{ background: #b91c1c; color: white; padding: 10px 15px; border-radius: 4px; font-weight: bold; }}
+.countdown {{ background: #b91c1c; color: white; padding: 10px 15px; border-radius: 4px; font-weight: bold; font-size: 1.1em; }}
 .table-container {{ overflow-x: auto; margin-top: 20px; }}
 table {{ border-collapse: collapse; width: 100%; background: #1e1e1e; font-size: 0.8em; }}
 th, td {{ border: 1px solid #333; padding: 8px; text-align: left; white-space: nowrap; }}
-th {{ background: #2d2d2d; color: #00ffcc; text-transform: uppercase; }}
+th {{ background: #2d2d2d; color: #00ffcc; text-transform: uppercase; letter-spacing: 0.5px; }}
 tr:nth-child(even) {{ background: #252525; }}
 tr:hover {{ background: #333; }}
 tr:last-child {{ background: #00ffcc11; color: #00ffcc; font-weight: bold; }}
 h1 {{ margin: 0; color: #00ffcc; }}
+.meta {{ color: #888; margin-top: 10px; font-size: 0.9em; }}
 </style>
 </head>
 <body>
@@ -62,7 +67,7 @@ h1 {{ margin: 0; color: #00ffcc; }}
 <h1>Legion Leaderboard</h1>
 <div class="countdown">WIPE IN: {countdown}</div>
 </div>
-<p>Refreshed: {now.strftime("%Y-%m-%d %H:%M:%S")}</p>
+<div class="meta">Data Refreshed: {now.strftime("%Y-%m-%d %H:%M:%S")}</div>
 <div class="table-container">
 {df_final.to_html(index=False, escape=False)}
 </div>
@@ -71,8 +76,10 @@ h1 {{ margin: 0; color: #00ffcc; }}
     
     with open("index.html", "w") as f:
         f.write(html_content)
+    print("Dashboard 'index.html' generated (Alphabetical Sort).")
 
 def run_guild_sync():
+    """Main ETL pipeline."""
     print(f"Connecting to Claim: {CLAIM_ID}")
     
     try:
@@ -81,9 +88,9 @@ def run_guild_sync():
         resp.raise_for_status()
         raw_data = resp.json()
         
-        # Access the list inside the 'members' key
+        # Access the 'members' key from the dictionary we discovered
         members_data = raw_data.get('members', [])
-        print(f"Found {len(members_data)} members in claim.")
+        print(f"Syncing {len(members_data)} members...")
     except Exception as e:
         print(f"FAILED to fetch claim members: {e}")
         sys.exit(1)
@@ -94,17 +101,14 @@ def run_guild_sync():
         name = member.get('userName')
         p_id = member.get('playerEntityId')
         
-        if not p_id or not name:
-            continue
+        if not p_id or not name: continue
 
         try:
-            # Use the Entity ID directly - no fuzzy search needed!
-            p_resp = requests.get(f"https://bitjita.com/api/players/{p_id}", timeout=10)
+            p_resp = requests.get(f"https://bitjita.com/api/players/{p_id}", timeout=15)
             p_data = p_resp.json().get('player')
             
             stats = {"Name": name, "Timestamp": datetime.now().strftime("%H:%M")}
             
-            # Map skills from the player data
             for exp in p_data.get('experience', []):
                 s_id = str(exp.get('skill_id'))
                 if s_id in p_data.get('skillMap', {}):
@@ -120,17 +124,18 @@ def run_guild_sync():
     if all_stats:
         df = pd.DataFrame(all_stats).fillna(1)
         
-        # Calculate Averages for the footer
+        # Calculate Averages for the footer row
         numeric_cols = df.select_dtypes(include=['number']).columns
         avg_row = {col: round(df[col].mean(), 1) for col in numeric_cols}
         avg_row['Name'] = '<strong>GUILD AVERAGE</strong>'
         avg_row['Timestamp'] = '-'
         
+        # Add average row to the list before sending to HTML
         df = pd.concat([df, pd.DataFrame([avg_row])], ignore_index=True)
         
         df.to_csv("legion_live_stats.csv", index=False)
         generate_html(df)
-        print(f"Sync complete. Total: {len(all_stats)} players.")
+        print(f"Sync complete. Processed {len(all_stats)} players.")
     else:
         print("No player data was retrieved.")
         sys.exit(1)
