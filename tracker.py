@@ -1,3 +1,77 @@
+import requests
+import pandas as pd
+from datetime import datetime
+import os
+import sys
+
+# --- CONFIGURATION ---
+CLAIM_ID = "576460752315947982"
+WIPE_DATE = datetime(2026, 2, 26, 12, 0, 0) 
+XP_MULTIPLIER = 1.106 
+
+def get_xp_table(max_level=120):
+    xp_table = [0]
+    current_total_xp = 0
+    for level in range(1, max_level):
+        xp_to_next_level = int(640 * (XP_MULTIPLIER ** (level - 1)))
+        current_total_xp += xp_to_next_level
+        xp_table.append(current_total_xp)
+    return xp_table
+
+BITCRAFT_XP_TABLE = get_xp_table()
+
+def calculate_level(xp):
+    if xp <= 0: return 1
+    for level, threshold in enumerate(BITCRAFT_XP_TABLE):
+        if xp < threshold: return level
+    return len(BITCRAFT_XP_TABLE)
+
+def generate_html(df):
+    now = datetime.now()
+    delta = WIPE_DATE - now
+    countdown = f"{delta.days}d {delta.seconds//3600}h" if delta.total_seconds() > 0 else "WIPED"
+
+    # Separate players and average for clean sorting
+    player_df = df[df['Name'] != '<strong>GUILD AVERAGE</strong>'].copy()
+    avg_df = df[df['Name'] == '<strong>GUILD AVERAGE</strong>'].copy()
+
+    if 'Carpentry' in player_df.columns:
+        player_df = player_df.sort_values(by='Carpentry', ascending=False)
+
+    df_final = pd.concat([player_df, avg_df], ignore_index=True)
+
+    html_content = f"""<html>
+<head>
+<title>Legion Guild Tracker</title>
+<style>
+body {{ font-family: sans-serif; background: #121212; color: #e0e0e0; padding: 20px; }}
+.header {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #00ffcc; padding-bottom: 10px; }}
+.countdown {{ background: #b91c1c; color: white; padding: 10px 15px; border-radius: 4px; font-weight: bold; }}
+.table-container {{ overflow-x: auto; margin-top: 20px; }}
+table {{ border-collapse: collapse; width: 100%; background: #1e1e1e; font-size: 0.8em; }}
+th, td {{ border: 1px solid #333; padding: 8px; text-align: left; white-space: nowrap; }}
+th {{ background: #2d2d2d; color: #00ffcc; text-transform: uppercase; }}
+tr:nth-child(even) {{ background: #252525; }}
+tr:hover {{ background: #333; }}
+tr:last-child {{ background: #00ffcc11; color: #00ffcc; font-weight: bold; }}
+h1 {{ margin: 0; color: #00ffcc; }}
+</style>
+</head>
+<body>
+<div class="header">
+<h1>Legion Leaderboard</h1>
+<div class="countdown">WIPE IN: {countdown}</div>
+</div>
+<p>Refreshed: {now.strftime("%Y-%m-%d %H:%M:%S")}</p>
+<div class="table-container">
+{df_final.to_html(index=False, escape=False)}
+</div>
+</body>
+</html>"""
+    
+    with open("index.html", "w") as f:
+        f.write(html_content)
+
 def run_guild_sync():
     print(f"Connecting to Claim: {CLAIM_ID}")
     
@@ -7,47 +81,30 @@ def run_guild_sync():
         resp.raise_for_status()
         raw_data = resp.json()
         
-        # --- THE FIX IS HERE ---
-        # If the API returns a dict with a 'members' key, use that. 
-        # Otherwise, assume it's already a list.
-        if isinstance(raw_data, dict) and 'members' in raw_data:
-            members_data = raw_data['members']
-        else:
-            members_data = raw_data
-        # -----------------------
-        
-        print(f"Syncing {len(members_data)} members found in claim...")
+        # Access the list inside the 'members' key
+        members_data = raw_data.get('members', [])
+        print(f"Found {len(members_data)} members in claim.")
     except Exception as e:
         print(f"FAILED to fetch claim members: {e}")
         sys.exit(1)
 
     all_stats = []
     
-    for item in members_data:
-        # Standardize data extraction
-        if isinstance(item, dict):
-            name = item.get('userName')
-            p_id = item.get('playerEntityId')
-        else:
-            name = str(item)
-            p_id = None
-            
-        if not name or name.lower() == 'count': continue
+    for member in members_data:
+        name = member.get('userName')
+        p_id = member.get('playerEntityId')
+        
+        if not p_id or not name:
+            continue
 
         try:
-            # If we don't have an ID, search for it
-            if not p_id:
-                search_res = requests.get(f"https://bitjita.com/api/players?q={name}", timeout=10).json()
-                if search_res.get('players'):
-                    p_id = search_res['players'][0]['entityId']
-                else:
-                    continue
-
-            # Get the levels
+            # Use the Entity ID directly - no fuzzy search needed!
             p_resp = requests.get(f"https://bitjita.com/api/players/{p_id}", timeout=10)
             p_data = p_resp.json().get('player')
             
             stats = {"Name": name, "Timestamp": datetime.now().strftime("%H:%M")}
+            
+            # Map skills from the player data
             for exp in p_data.get('experience', []):
                 s_id = str(exp.get('skill_id'))
                 if s_id in p_data.get('skillMap', {}):
@@ -58,21 +115,25 @@ def run_guild_sync():
             print(f"Synced: {name}")
             
         except Exception as e:
-            print(f"Error with {name}: {e}")
+            print(f"Error syncing {name}: {e}")
 
     if all_stats:
         df = pd.DataFrame(all_stats).fillna(1)
         
-        # Calculate Averages
+        # Calculate Averages for the footer
         numeric_cols = df.select_dtypes(include=['number']).columns
         avg_row = {col: round(df[col].mean(), 1) for col in numeric_cols}
         avg_row['Name'] = '<strong>GUILD AVERAGE</strong>'
         avg_row['Timestamp'] = '-'
         
-        # Combine and Save
         df = pd.concat([df, pd.DataFrame([avg_row])], ignore_index=True)
+        
         df.to_csv("legion_live_stats.csv", index=False)
         generate_html(df)
+        print(f"Sync complete. Total: {len(all_stats)} players.")
     else:
-        print("No players found.")
+        print("No player data was retrieved.")
         sys.exit(1)
+
+if __name__ == "__main__":
+    run_guild_sync()
